@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>Detector de sillas y sofás</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111827;
+      color: #f9fafb;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(ellipse at 50% 0, rgb(37 99 235 / 18%), transparent 48%),
+        #111827;
+    }
+
+    main {
+      width: min(100%, 560px);
+    }
+
+    header {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.6rem, 7vw, 2rem);
+      letter-spacing: -0.04em;
+    }
+
+    header p {
+      margin: 8px 0 0;
+      color: #9ca3af;
+      font-size: 0.95rem;
+    }
+
+    .camera-frame {
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      border: 1px solid #374151;
+      border-radius: 20px;
+      background: #030712;
+      box-shadow: 0 24px 70px rgb(0 0 0 / 28%);
+    }
+
+    video {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .camera-placeholder {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      color: #9ca3af;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .camera-placeholder[hidden] {
+      display: none;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    button {
+      min-height: 52px;
+      padding: 12px 16px;
+      border: 0;
+      border-radius: 14px;
+      font: inherit;
+      font-weight: 650;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: background-color 140ms ease, transform 140ms ease;
+    }
+
+    button:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    button:focus-visible {
+      outline: 3px solid #93c5fd;
+      outline-offset: 3px;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    #camera-button {
+      color: white;
+      background: #2563eb;
+    }
+
+    #camera-button:hover:not(:disabled) {
+      background: #1d4ed8;
+    }
+
+    #switch-button {
+      color: #e5e7eb;
+      background: #374151;
+    }
+
+    #switch-button:hover:not(:disabled) {
+      background: #4b5563;
+    }
+
+    .results {
+      margin-top: 20px;
+      padding: 18px;
+      border: 1px solid #374151;
+      border-radius: 18px;
+      background: rgb(31 41 55 / 78%);
+    }
+
+    .results-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    #status {
+      color: #9ca3af;
+      font-size: 0.82rem;
+      text-align: right;
+    }
+
+    #status[data-state="error"] {
+      color: #fca5a5;
+    }
+
+    #predictions {
+      display: grid;
+      gap: 12px;
+    }
+
+    .prediction {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 7px 12px;
+      align-items: center;
+      font-size: 0.92rem;
+    }
+
+    .prediction strong {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .meter {
+      grid-column: 1 / -1;
+      height: 8px;
+      overflow: hidden;
+      border-radius: 99px;
+      background: #111827;
+    }
+
+    .meter span {
+      display: block;
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #3b82f6, #34d399);
+      transition: width 180ms ease;
+    }
+
+    .privacy-note {
+      margin: 14px 4px 0;
+      color: #9ca3af;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    @media (max-width: 380px) {
+      .controls {
+        grid-template-columns: 1fr;
+      }
+
+      .results {
+        padding: 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Detector de sillas y sofás</h1>
+      <p>Apunta la cámara a un objeto para identificarlo.</p>
+    </header>
+
+    <section aria-label="Cámara">
+      <div class="camera-frame">
+        <video id="camera" autoplay muted playsinline aria-label="Vista en directo de la cámara"></video>
+        <div class="camera-placeholder" id="placeholder">
+          <span>Activa la cámara para empezar</span>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="camera-button" type="button" disabled>Preparando modelo…</button>
+        <button id="switch-button" type="button" disabled>Cambiar cámara</button>
+      </div>
+    </section>
+
+    <section class="results" aria-labelledby="results-title">
+      <div class="results-heading">
+        <h2 id="results-title">Detección</h2>
+        <span id="status" role="status" aria-live="polite">Cargando modelo…</span>
+      </div>
+      <div id="predictions" aria-live="polite"></div>
+    </section>
+
+    <p class="privacy-note">La cámara solo funciona mientras esta página está abierta. El vídeo se procesa en este dispositivo.</p>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.7.4/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+  <script>
+    const MODEL_URL = "./modelo/tm-my-image-model/";
+    const video = document.querySelector("#camera");
+    const placeholder = document.querySelector("#placeholder");
+    const cameraButton = document.querySelector("#camera-button");
+    const switchButton = document.querySelector("#switch-button");
+    const status = document.querySelector("#status");
+    const predictions = document.querySelector("#predictions");
+
+    let model;
+    let stream;
+    let facingMode = "environment";
+    let predictionActive = false;
+    let cameraPending = false;
+
+    function setStatus(message, state = "normal") {
+      status.textContent = message;
+      status.dataset.state = state;
+    }
+
+    function renderPredictions(results) {
+      predictions.replaceChildren();
+
+      for (const result of results) {
+        const row = document.createElement("div");
+        row.className = "prediction";
+
+        const label = document.createElement("span");
+        label.textContent = result.className;
+
+        const confidence = document.createElement("strong");
+        confidence.textContent = `${(result.probability * 100).toFixed(1)}%`;
+
+        const meter = document.createElement("div");
+        meter.className = "meter";
+        meter.setAttribute("role", "meter");
+        meter.setAttribute("aria-label", result.className);
+        meter.setAttribute("aria-valuemin", "0");
+        meter.setAttribute("aria-valuemax", "100");
+        meter.setAttribute("aria-valuenow", (result.probability * 100).toFixed(1));
+
+        const fill = document.createElement("span");
+        fill.style.width = `${Math.max(0, Math.min(100, result.probability * 100))}%`;
+        meter.append(fill);
+        row.append(label, confidence, meter);
+        predictions.append(row);
+      }
+    }
+
+    async function predictContinuously() {
+      while (predictionActive && stream) {
+        try {
+          const results = await model.predict(video);
+          if (!predictionActive) return;
+          renderPredictions(results.sort((a, b) => b.probability - a.probability));
+          setStatus("Detectando");
+        } catch (error) {
+          predictionActive = false;
+          setStatus("No se pudo analizar el vídeo.", "error");
+          console.error("Error al clasificar el vídeo:", error);
+          return;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 180));
+      }
+    }
+
+    async function startCamera(mode) {
+      if (cameraPending) return;
+
+      cameraPending = true;
+      cameraButton.disabled = true;
+      switchButton.disabled = true;
+      let nextStream;
+      const wasPredicting = predictionActive;
+
+      try {
+        nextStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: mode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        });
+
+        const previousStream = stream;
+        video.srcObject = nextStream;
+        await video.play();
+
+        stream = nextStream;
+        facingMode = mode;
+        placeholder.hidden = true;
+        cameraButton.textContent = "Detener cámara";
+        predictionActive = true;
+        setStatus("Detectando");
+
+        if (previousStream) {
+          previousStream.getTracks().forEach(track => track.stop());
+        }
+
+        if (!wasPredicting) {
+          predictContinuously();
+        }
+      } catch (error) {
+        if (nextStream && nextStream !== stream) {
+          nextStream.getTracks().forEach(track => track.stop());
+        }
+
+        console.error("No se pudo iniciar la cámara:", error);
+        if (!stream) {
+          setStatus(cameraErrorMessage(error), "error");
+        } else {
+          video.srcObject = stream;
+          try {
+            await video.play();
+            setStatus("No se pudo cambiar de cámara; continúa la anterior.", "error");
+          } catch (restoreError) {
+            console.error("No se pudo restaurar la cámara anterior:", restoreError);
+            setStatus("No se pudo restaurar la cámara anterior. Vuelve a activarla.", "error");
+          }
+        }
+      } finally {
+        cameraPending = false;
+        cameraButton.disabled = !model;
+        switchButton.disabled = !stream;
+      }
+    }
+
+    function cameraErrorMessage(error) {
+      if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
+        return "Permite el acceso a la cámara en el navegador.";
+      }
+      if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
+        return "No se encontró ninguna cámara.";
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        return "La cámara requiere HTTPS o localhost.";
+      }
+      return "No se pudo acceder a la cámara.";
+    }
+
+    function stopCamera() {
+      predictionActive = false;
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = undefined;
+      }
+      video.srcObject = null;
+      placeholder.hidden = false;
+      cameraButton.textContent = "Activar cámara";
+      switchButton.disabled = true;
+      setStatus("Cámara detenida");
+    }
+
+    cameraButton.addEventListener("click", () => {
+      if (stream) {
+        stopCamera();
+      } else {
+        startCamera(facingMode);
+      }
+    });
+
+    switchButton.addEventListener("click", () => {
+      if (stream) {
+        startCamera(facingMode === "environment" ? "user" : "environment");
+      }
+    });
+
+    async function loadModel() {
+      try {
+        if (!window.tmImage) {
+          throw new Error("No se pudo cargar la librería de TensorFlow.js.");
+        }
+        model = await tmImage.load(`${MODEL_URL}model.json`, `${MODEL_URL}metadata.json`);
+        cameraButton.disabled = false;
+        cameraButton.textContent = "Activar cámara";
+        setStatus("Modelo listo");
+      } catch (error) {
+        console.error("No se pudo cargar el modelo:", error);
+        cameraButton.textContent = "Error al cargar modelo";
+        setStatus("Comprueba los archivos del modelo y vuelve a cargar.", "error");
+      }
+    }
+
+    loadModel();
+  </script>
+</body>
+</html>
